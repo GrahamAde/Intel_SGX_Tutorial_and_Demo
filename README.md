@@ -203,9 +203,13 @@ EREMOVE - This instruction permanently removes a page from the enclave.
 #### Explanation
 
 1 - The application requests the loading of its enclave into memory.
+
 2 - The ECREATE instruction creates and fills the SECS structure.
+
 3 - Each page is loaded into protected memory using the EADD instruction.
+
 4 - Each page is added to the measure of the enclave using the EEXTEND instruction.
+
 5 - The EINIT instruction finalizes the enclave creation.
 
 ![SGX_Enclave_Creation](/images/SGX_Enclave_Creation.png?raw=true "SGX Enclave Creation")
@@ -223,12 +227,15 @@ EEXIT - This instruction puts the process back in its original mode and purges t
 Enclave Entry
 
 1 - EENTRY instruction is executed.
+
 2 - The application context is saved.
+
 3 - The processor is put into "enclave mode".
 
 Enclave Exit
 
 1 - EEXIT instruction is executed.
+
 2 - The processor is put into "normal mode".
 
 ![SGX_Enclave_Lifecycle](/images/SGX_Enclave_Lifecycle.png?raw=true "SGX Enclave Lifecycle")
@@ -248,11 +255,17 @@ When an AEX occurs, the context of the enclave is saved in the current SSA and t
 Handling an Interruption
 
 1 - The interruption or exception arrives at the processor.
+
 2 - The enclave context is saved, and the application context is restored.
+
 3 - The execution continues in the handler of the operating system.
+
 4 - The handler returns (IRET) to the AEP, a trampoline function.
+
 5 - AEP executes ERESUME if it decides to resume enclave execution.
+
 6 - The enclave context previously saved is restored.
+
 7 - The execution resumes where it stopped within the enclave.
 
 ![SGX_Interrupt_Handling](/images/SGX_Interrupt_Handling.png?raw=true "SGX Interrupt Handling")
@@ -302,7 +315,9 @@ Two types of attestation exist:
 Local Attestation
 
 1 - A channel must have already been established between enclave A and enclave B.  It is used by enclave A to retrieve the MRENCLAVE of enclave B.
+
 2 - Enclave A calls EREPORT with the MRENCLAVE of enclave B to generate a signed report for the latter.
+
 3 - Enclave B calls EGETKEY to retrieve its "Report Key" and verify the MAC of the EREPORT structure.  If valid, the enclave is the one expected and running on a legitimate platform.
 
 ![SGX_Local_Attestation](/images/SGX_Local_Attestation.png?raw=true "SGX Local Attestation")
@@ -312,11 +327,17 @@ Remote Attestation
 Remote attestation requires an architectural enclave called the "Quoting Enclave" (QE).  This enclave verifies and transforms the REPORT (locally verifiable) into a QUOTE (remotely verifiable) by signing it with another special key, the "Provisioning Key".
 
 1 - Initially, the enclave informs the application that it needs a secret located outside of the platform.  The application establishes a secure communication with a server.  The server responds with a challenge to prove that the enclave executing has not been tampered with and that the platform it executes on is legitimate.
+
 2 - The application gives the "Quoting Enclave" identity and the challenge to its enclave.
+
 3 - The enclave generates a manifest including the challenge answer and an ephemeral public key that will be used later to secure the communications between the server and the enclave.  It generates a hash of the manifest that it includes in the user data section of the EREPORT instruction.  The instruction generates a REPORT for the "Quoting Enclave" that ties the manifest to the enclave.  The enclave passes the REPORT to the application.
+
 4 - The application transfers the REPORT to the "Quoting Enclave" for verification and signing.
+
 5 - The QE retrieves its "Report Key" using the EGETKEY instruction and verifies the REPORT.  It creates the QUOTE structure and signs it using its "Provisioning Key" before giving it back to the application.
+
 6 - The application sends the QUOTE and associated manifest to the server for verification.
+
 7 - The server uses the attestation service provided by Intel to validate the QUOTE signature.  It then checks the manifest integrity using the hash from the QUOTE user data.  Finally, it makes sure that the manifest contains the expected answer to the challenge.
 
 ![SGX_Remote_Attestation](/images/SGX_Remote_Attestation.png?raw=true "SGX Remote Attestation")
