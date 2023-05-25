@@ -423,11 +423,11 @@ Each SGX-enabled processor contains two root keys which are stored inside e-fuse
 
 ##### Root Keys
 
-Root Provisioning Key
+###### Root Provisioning Key
 
 The first key created by Intel during the manufacturing process is the "Root Provisioning Key" (RPK).  This key is generated randomly on a dedicated "Hardware Security Module" (HSM) located inside a facility called the "Intel Key Generation Facility" (IKGF).  Intel is responsible for maintaining a database containing all keys produced by the HSM.  The RPKs are sent to multiple production facilities to be embedded inside the processor e-fuses.
 
-Root Sealing Key
+###### Root Sealing Key
 
 The second key located inside the e-fuses is called the "Root Sealing Key" (RSK).  Like the first key, it is guaranteed to differ statistically between each processor produced.  Contrary to the RSK, Intel erases every trace of these keys from their production chain after they have been incorporated into a processor in order for each platform to have a unique key only known to itself.
 
