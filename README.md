@@ -48,7 +48,7 @@ Overall, the Intel SGX PSW plays a crucial role in facilitating the secure execu
 
 ### Introduction
 
-Intel SGX is a technology that was developed to meet the needs of the Trusted Computing industry for enterprise server environments (and some consumer-grade hardware), in a similar fashion to "ARM TrustZone" or "RISC-V PMP (Physical Memory Protection).  It allows user-land (Ring 3) code to create private memory regions, called enclaves, that are isolated from other processes running at the same or higher privilege levels.  The code running inside the enclave is effectively isolated from other applications, the operating system, kernel, hypervisor, etc.
+Intel SGX is a technology that was developed to meet the needs of the Trusted Computing industry for enterprise server environments (and some consumer-grade hardware), in a similar fashion to "ARM TrustZone" or "RISC-V PMP (Physical Memory Protection)".  It allows user-land (Ring 3) code to create private memory regions, called enclaves, that are isolated from other processes running at the same or higher privilege levels.  The code running inside the enclave is effectively isolated from other applications, the operating system, kernel, hypervisor, etc.
 
 It was introduced in 2015 with the sixth-generation Intel Core processor family based on the Skylake microarchitecture.  SGX support can be checked by executing the "CPUID" instruction with the "Structured Extended Feature Leaf" flag set, and checking if the second bit of the "EBX" register is set.  To be able to use SGX, it must be enabled in the BIOS, and only certain BIOSes support SGX-enabled processors.
 
@@ -56,11 +56,11 @@ It was introduced in 2015 with the sixth-generation Intel Core processor family 
 
 The implementation of Intel SGX can be summarized in a few points:
 
-- An application is pslit into two parts: a secure part and an insecure part.
+- An application is split into two parts: a secure part and an insecure part.
 - The application launches the enclave, which is placed in protected memory.
 - When an enclave function is called, only the code within the enclave can see its data, all external access is blocked.  When the enclave function is finished, no enclave data is transferred to the insecure part of the application.
 
-![SGX_Process_View](/images/SGX_Process_View.png?raw=true "SGX Process View")
+<p align="center">![SGX_Process_View](/images/SGX_Process_View.png?raw=true "SGX Process View")</p>
 
 The secure execution environment is part of the host process.  This means:
 
@@ -71,11 +71,11 @@ The secure execution environment is part of the host process.  This means:
 - Multi-threading is supported.
 - An enclave can access its application's memory, but not vice versa.
 
-![SGX_Memory_View](/images/SGX_Memory_View.png?raw=true "SGX Memory View")
+<p align="center">![SGX_Memory_View](/images/SGX_Memory_View.png?raw=true "SGX Memory View")</p>
 
 ### Instructions
 
-Intel SGX defines 18 new instructions: 13 used by the supervisor and 5 by the user.  All these instructions are implemented in microcode so that their behavior can be modified
+Intel SGX defines 18 new instructions: 13 used by the supervisor and 5 by the user.  All these instructions are implemented in microcode so that their behavior can be modified.
 
 #### Supervisor Instruction Set
 
