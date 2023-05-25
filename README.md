@@ -130,7 +130,7 @@ The traditional page check is extended to prevent external accesses to the EPC p
 
 #### Enclave Page Cache Map
 
-The "Enclave Page Cache Map" (EPCM) structure is used to store the pages state.  It is located inside the protected memory and its size limits the size of the EPC.  This is set via the BIOS and can be a maximum of 128MB.  It contains the configuration, permissions, and type of each page.
+The "Enclave Page Cache Map" (EPCM) structure is used to store the pages' state.  It is located inside the protected memory and its size limits the size of the EPC.  This is set via the BIOS and can be a maximum of 128MB.  It contains the configuration, permissions, and type of each page.
 
 ### Memory Management
 
@@ -150,13 +150,13 @@ EPA - This instruction allocates a 4kB memory page that will contain the page's 
 
 EBLOCK - This instruction blocks all accesses to the page being prepared for eviction.  All future accesses to this page will result in a page fault ("page blocked").
 
-ETRACK - This instruction evicts a page from the EPC.  The page must have been prepared properly; it must be blocked and must not be refernced by the TLB.  Before writing it into the external memory, the apge is encrypted, a version number and metadata are generated, and a final MAC is performed.
+ETRACK - This instruction evicts a page from the EPC.  The page must have been properly prepared; it must be blocked and must not be referenced by the TLB.  Before writing it into the external memory, the page is encrypted, a version number and metadata are generated, and a final MAC is performed.
 
 ELDB/ELDU - This instruction loads into memory a previously evicted page regardless if it is in a blocked state or not.  It checks the MAC of the metadata, version number from the corresponding VA entry, and the page encrypted content.  If the verification succeeds, the page content is decrypted and placed inside the chosen EPC page and the corresponding VA entry is deleted.
 
 #### Explanation
 
-The EPC meory is defined by the BIOS and limited in size.  SGX has a way for removing a page from the EPC, placing it in unprotected memory, and restoring it later.  Pages maintain the same security properties thanks to the EPC page management instructions, that allow page encryption and the generation of additional metadata.  A page connot be removed until all the cache entries referencing this page have been removed form all processor cores.  Content is exported or imported with a granularity of a page, which is 4kB.
+The EPC memory is defined by the BIOS and limited in size.  SGX has a way for removing a page from the EPC, placing it in unprotected memory, and restoring it later.  Pages maintain the same security properties thanks to the EPC page management instructions, that allow page encryption and the generation of additional metadata.  A page connot be removed until all the cache entries referencing this page have been removed form all processor cores.  Content is exported or imported with a granularity of a page, which is 4kB.
 
 ![SGX_Page_Management](/images/SGX_Page_Management.png?raw=true "SGX Page Management")
 
@@ -164,7 +164,7 @@ The EPC meory is defined by the BIOS and limited in size.  SGX has a way for rem
 
 SGX Enclave Control Structure (SECS) - Each enclave is associated with a SECS structure, which contains its metadata (e.g. its hash and size).  It is not accessible by any secure or insecure code, only by the processor itself.  It is also immutable once it is instantiated.
 
-Thread Control Structure (TCS) - Each enclave is associated with at least one TCS structure, which indicates an execution point into the enclave.  As SGX supports multi-threading, an enclave can have as many active threads as it has TCS.  Like the SECS structure, it is only accessible by the processor and is immutable.
+Thread Control Structure (TCS) - Each enclave is associated with at least one TCS structure, which indicates an execution point into the enclave.  Since SGX supports multi-threading, an enclave can have as many active threads as it has TCS.  Like the SECS structure, it is only accessible by the processor and is immutable.
 
 Save State Area (SSA) - Each TCS is associated with at least one SSA structure, which is used to save the processor's state during the exceptions and interrupt handling.  It is written when exiting the enclave and read when resuming the enclave.
 
@@ -176,7 +176,7 @@ Stack and Heap - Each enclave can use its stack and heap.  The RBP and RSP regis
 
 #### Measures
 
-Enclave Measure - Each enclave is represented by a hash of boths its attributes and the position, content, and protection of its pages.  Two enclaves with the same hash are identical.  This measure is called MRENCLAVE and is used to check the integrity of the enclave.
+Enclave Measure - Each enclave is represented by a hash of both its attributes and the position, content, and protection of its pages.  Two enclaves with the same hash are identical.  This measure is called MRENCLAVE and is used to check the integrity of the enclave.
 
 Signer Measure - Each enclave is also signed by its author.  MRSIGNER contains the hash of the public key of the author.  MRENCLAVE and MRSIGNER are produced using the SHA-256 hash function.
 
@@ -194,7 +194,7 @@ EADD - This instruction adds a new page to the enclave.  The operating system is
 
 EEXTEND - This instruction adds a page's content to the enclave measure by a block of 256 bytes.  It must be called 16 times to add a complete page to the measure (4kB).
 
-EINIT - This instruction checks that the enclave corresponds to its EINITTOKEN (same measure and attributes) before initializing it.  It also check s that the token is signed with the "Launch Key".
+EINIT - This instruction checks that the enclave corresponds to its EINITTOKEN (same measure and attributes) before initializing it.  It also checks that the token is signed with the "Launch Key".
 
 EREMOVE - This instruction permanently removes a page from the enclave.
 
@@ -286,7 +286,7 @@ The sealing can be done using the encalve identity.  The key derivation is then 
 
 Using the Signer Identity
 
-The sealing can also be done using the signer identity.  The key derivation is then based on the value of MRSIGNER.  Two distinct enclaves still have different keys, but two versions of an enclave share the same key and can read the sealed data.  IF multiple enclaves are signed using the same key, then they can read each other's data.
+The sealing can also be done using the signer identity.  The key derivation is then based on the value of MRSIGNER.  If two versions of an enclave share the same key, then they each can read the sealed data.  If multiple separate enclaves are signed using the same key, then they can read each other's data.
 
 Security Version Number (SVN)
 
@@ -349,6 +349,125 @@ This section has explained how SGX works internally at the processor / memory le
 ***
 
 <h2 id="OverviewExternals">Overview of Intel SGX Externals</h2>
+
+### Introduction
+
+The following is an explanation on how the application interacts with its enclave and the different pieces of software in the SGX SDK and PSW.  At the end, known attacks against SGX and concerns with the technology are addressed.
+
+### Interactions
+
+Conceptually, an SGX enclave can be seen as a black box that is capable of executing any arbitrary algorithm.  This black box can communicate with the outside world using three different ways presented below:
+
+#### Enclave Calls (ECALLs)
+
+The application can invoke a predefined function inside the enclave, passing input parameters and pointers to shared memory within the application.  Thos invocations from the application to the enclave are called ECALLs.
+
+#### Outside Calls (OCALLs)
+
+When an enclave executes, it can perform an OCALL to a predefined function in the application.  Contrary to an ECALL, an OCALL cannot share enclave memory with the application, so it must copy the parameters into the application memory before the OCALL.
+
+#### Asynchronous Exit (AEX)
+
+The execution can also exit an encllave because of an interruption or an exception.  These enclave exit events are called "Asynchronous Exit Events" (AEX).  They can transfer control from the enclave to the application from arbitrary points inside the enclave.
+
+### Programming
+
+#### Trusted Code Base (TCB)
+
+Developing an application that uses an SGX enclave requires the programmer to identify the resources that must be protected, the data structure containing those resources, and the code that manages them.  Then, everything that has been identified must be placed inside the enclave.  An enclave file is a library that is compatible with the traditional operating system loaders.  It contains the code and data of the enclave, which is in plaintext on the disk.
+
+#### Interface Functions
+
+The interface between the application and its enclave must be designed carefully.  An enclave declares which functions can be called by the application and which functions from the application the enclave can call.  Enclave input parameters can be observed and modified by the non-secure code, so they must be checked extensively.  As an enclave cannot directly access the services of the OS, but it must call back to its application.  Those calls should not expose any confidential information and also are not guaranteed to be performed as expected by the enclave.
+
+#### Software Development Kit (SDK)
+
+The "Software Development Kit" (SDK) provides developers with everything they need to develop an SGX-enabled application.  It is composed of a tool to generate the interface functions between the application and the enclave, a tool to sign the enclave before using it, a tool to debug it, and a tool to measure application / enclave performance.  It also contains templates and smaple projects to develop an enclave using Visual Studio under Windows or using Makefiles under GNU/Linux.
+
+#### Platform Software (PSW)
+
+The "Platform Software" (PSW) is the software stack that allows SGX-enabled applications to execute on the target platform.  It is available for Windows and GNU/Linux operating systems and is composed of four major parts:
+
+- A driver that provides access to the hardware features;
+- Multiple support libraries for execution and attestation;
+- The architectural enclaves necessary for the environment to run;
+- A service to load and communicate with the enclaves.
+
+#### Architectural Enclaves
+
+To allow the secure environment to execute, several "Architectural Enclaves" (AE) are needed.  They are provided and signed by Intel.  They enforce launch policies, perform the provisioning and attestation processes, and more.
+
+##### Launch Enclave
+
+The "Launch Enclave" (LE) is the enclave responsible for distributing EINITTOKEN structures to other enclaves wishing to execute on the platform.  It checks the signature and identity of the enclave to ensure that they are valid.  To generate the tokens, the Launch Enclave uses the "Launch Key".  The Launch Enclave is the only enclave able to access this key.
+
+##### Provisioning Enclave
+
+The "Provisioning Enclave" (PvE) is the enclave responsible for retrieving the "Attestation Key" by communicating with the "Intel Provisioning Service" servers.  It proves the authenticity of the platform using a certificate provided by the PcE.
+
+##### Provisioning Certificate Enclave
+
+The Provisioning Certificate Enclave (PcE) is the enclave responsible for signing the processor certificate used by the PvE.  It signs the processor certificate wit the "Provisioning Key" which is only accessible by the PcE.  The PvE and PcE are implemented as a single enclave.
+
+##### Quoting Enclave
+
+The "Quoting Enclave" (QE) is the enclave responsible for providing trust for the identity of an enclave and the environment where it executes during the remote attestation process.  It decrypts the "Attestation Key" that it receives from the PvE and uses this key to transform a REPORT structure (locally verifiable) into a QUOTE structure (remotely verifiable).
+
+##### Platform Service Enclaves
+
+The "Platform Service Enclaves" (PSE) are architectural enclaves that offer other enclaves multiple services, like monotonous counters, trusted time, etc.  Those enclaves make use of the Management Engine (ME), an isolated and secure co-processor that manages the platform.
+
+#### Key Directory
+
+Each SGX-enabled processor contains two root keys which are stored inside e-fuses: the "Root Provisioning Key" (RPK) and the "Root Seal Key" (RSK).  The RPK is known to Intel to enable the remote attestation process, while the RSK is only known to the platform.  SGX was not designed to counter or prevent physical attacks, but efforts have been made to harden the processor against tampering and making the extraction of keys a very costly operation.  It is possible to read the e-fuses, but in a destructive way.  This is why the keys are stored encrypted on the e-fuses.  A "Physical Unclonable Function" (PUF) is used to store the symmetric key that is used to decipher the other keys during processor execution.
+
+##### Root Keys
+
+Root Provisioning Key
+
+The first key created by Intel during the manufacturing process is the "Root Provisioning Key" (RPK).  This key is generated randomly on a dedicated "Hardware Security Module" (HSM) located inside a facility called the "Intel Key Generation Facility" (IKGF).  Intel is responsible for maintaining a database containing all keys produced by the HSM.  The RPKs are sent to multiple production facilities to be embedded inside the processor e-fuses.
+
+Root Sealing Key
+
+The second key located inside the e-fuses is called the "Root Sealing Key" (RSK).  Like the first key, it is guaranteed to differ statistically between each processor produced.  Contrary to the RSK, Intel erases every trace of these keys from their production chain after they have been incorporated into a processor in order for each platform to have a unique key only known to itself.
+
+##### Key Derivation
+
+By design, an enclave does not have access to the root keys, but it can access keys derived from the root keys.  The derivation function allows an enclave author to specify a key derivation policy.  These policies allow the use of trusted values like the MRENCLAVE, MRSIGNER, and/or the attributes of the enclave.  Enclaves cannot derive keys belonging to a MRENCLAVE or MRSIGNER of another enclave.  When the key derivation policy does not make use of a field, it is automatically set to zero.  As a result, even when non-specialized keys are available, specialized keys cannot be derived from them.
+
+To add entropy coming from the user, a value called "Owner Epoch" is used as a parameter during the derivation process.  This value is configured at boot-time by the derivration of a password and saved during each power cycle in non-volatile memory.  This value must stay the same for an enclave to be able to retrieve the same keys.  On the contrary, this value must be changed when the platform owner chnages because it prevents the new owner from accessing the personal information of the old owner until the original password is restored.
+
+![SGX_KDF](/images/SGX_KDF.png?raw=true "SGX KDF")
+
+The SGX infrastructure supports TCB updates of its hardware and software components.  Each component has a SVN which is incremented after each security update.  A new SVN leads to a new "Sealing Key".  There exists a process allowing a newer TCB to access the "Sealing Keys" of older TCBs to allow for data migration.  Old TCBs cannot access the keys of newer TCBs.
+
+![SGX_Key_Recovery](/images/SGX_Key_Recovery.png?raw=true "SGX Key Recovery")
+
+##### Derived Keys
+
+###### Provisioning Key
+
+This key is derived from the RPK and used as a root of trust (tied to the TCB version) between the "Intel Provisioning Service" and the processor.  As admitting a non-SGX processor into a group of legitimate SGX processors compromise the remote attestation for all processors, extreme precautions must be taken to disallow access to the "Provisioning Key".  Currently, the "Launch Enclave" gives access to this key only if the enclave is signed by Intel (the MRSIGNER of Intel is hard-coded in the "Launch Enclave" code).
+
+###### Provisioning Seal Key
+
+This key is derived from the RPK and RSK.  During the enrollment of a processor in the group, the private key of each platform is encrypted with this key and sent to the "Intel Attestation Service".  It must be noted that the private key cannot only be encrypted using the RPK because that would destroy the anonymous enrollment protocol used.  Similarly, the private key cannot be encrypted only using the RSK as it would allow non-privileged enclaves to access the private key of the platform.  Given the uncertainty of the generation process used for the RSK, it is possible taht Intel knows the private keys of each platform.
+
+###### Launch Key
+
+This key is derived from the RSK and is used by the "Launch Enclave" to generate an EINITTOKEN.  Each enclave that is not signed by Intel must obtain this token or the processor cannot instantiate it.  Only a specific MRSIGNER, whose private keys are only known to Intel, can access the "Launch Key".  In SGXv2, the MRSIGNER of the "Launch Enclave" can be changed programmatically, but it is not known how Intel applies access control to the "Provisioning Key".
+
+###### Seal Key
+
+This key is derived from the RSK and is used to encrypt data related to the current platform.  It is important not to use a non-specialized "Seal Key", either for encryption or authentication, because that would compromise the enclave's security.
+
+###### Report Key
+
+This key is derived from the RSK and is used for the local attestation process.
+
+![SGX_Key_Overview](/images/SGX_Key_Overview.png?raw=true "SGX Key Overview")
+
+
 
 
 ***
