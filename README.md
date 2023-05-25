@@ -60,7 +60,7 @@ The implementation of Intel SGX can be summarized in a few points:
 - The application launches the enclave, which is placed in protected memory.
 - When an enclave function is called, only the code within the enclave can see its data, all external access is blocked.  When the enclave function is finished, no enclave data is transferred to the insecure part of the application.
 
-<p align="center">![SGX_Process_View](/images/SGX_Process_View.png?raw=true "SGX Process View")</p>
+![SGX_Process_View](/images/SGX_Process_View.png?raw=true "SGX Process View")
 
 The secure execution environment is part of the host process.  This means:
 
@@ -71,7 +71,7 @@ The secure execution environment is part of the host process.  This means:
 - Multi-threading is supported.
 - An enclave can access its application's memory, but not vice versa.
 
-<p align="center">![SGX_Memory_View](/images/SGX_Memory_View.png?raw=true "SGX Memory View")</p>
+![SGX_Memory_View](/images/SGX_Memory_View.png?raw=true "SGX Memory View")
 
 ### Instructions
 
