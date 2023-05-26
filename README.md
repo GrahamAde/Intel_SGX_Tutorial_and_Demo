@@ -538,7 +538,7 @@ Inside the processor, the "Branch Prediction Unit" (BPU) uses the "Branch Target
 
 The idea is to replicate the control flow of an enclave program inside the untrusted environment, carefully choosing the address at which this new code is mapped in order to introduce collisions inside the BTB.  By executing the branch within the enclave code first, then within the shadowed code, the prediction of the second branch is affected by the result of the first.  To know what was predicted by the processor, the "Last Branch Record" (LBR) can be used only in the untrusted environment, as it is disabled for enclaves.
 
-In order for this attack to work, the enclave execution must be interrupted as frequently as possible to perform the necessary measurements to infer the control flow of the enclave.  The APIC timer can be used to interrupt the execution every ~50 cycles and, if more precision is needed, disabling the processor cache allows to interrupt up to every ~5 cycles.
+In order for this attack to work, the enclave execution must be interrupted as frequently as possible to perform the necessary measurements to infer the control flow of the enclave.  The APIC timer can be used to interrupt the execution every ~50 cycles or, if more precision is needed, every ~5 cycles by disabling the processor cache.
 
 Below is an explanation of the detection of conditional branches occurring within an enclave (green represents the case where the branch is taken, red where it is not).
 
@@ -546,7 +546,7 @@ Below is an explanation of the detection of conditional branches occurring withi
 
 1 - The conditional branch instruction of the enclave is executed.  If taken, the corresponding information is stored within the BTB.  Because this is occurring within the enclave, the LBR does not report this information.
 
-2 - Enclave execution is interrupted by the APIC timer and the OS takes control.
+2 - Enclave execution is interrupted by the APIC timer, and the OS takes control.
 
 3 - The OS enables the LBR and executes the shadowed code.
 
@@ -554,15 +554,15 @@ Below is an explanation of the detection of conditional branches occurring withi
 
 5 - By disabling and retrieving the LBR content, the OS can learn whether the enclave branch was taken or not by checking if the shadowed conditional branch was correctly predicted.
 
-Similar techniques are able to detect unconditional and indirect branches (the target address cannot be recovered by the attack).  This attack requires complete control over the platform and knowledge of the code bein gexecuted inside the enclave.  It also introduces a significant slowdown that an enclave might be able to detect (but it is not as simple as executing RTDSC, because it is not allowed inside enclaves).
+Similar techniques are able to detect unconditional and indirect branches (the target address cannot be recovered by the attack).  This attack requires complete control over the platform and knowledge of the code being executed inside the enclave.  It also introduces a significant slowdown that an enclave might be able to detect (but it is not as simple as executing "Read Time-Stamp Counter" (RTDSC), because it is not allowed inside enclaves).
 
 ### Concerns
 
 Intel says that it does not retain the RPK embedded in each processor die at their manufacturing facilities, but if it turns out that they do, it would invalidate any security offered by the platform.  Futhermore, enclaves signed by Intel are granted special privileges, like the "Launch Enclave" (LE), which is used to whitelist which enclaves are allowed to execute.  Developers need to register into Intel programs to be able to sign release versions of their enclaves.  There exists an open-source initiative to develop an alternative LE that should be allowed to replace the current one starting with SGXv2.
 
-Another potential issue is that it is possible for malware to execute its malicious code inside an enclave protected from every other program and user.  However, it is important to remebmer that code within an enclave has no I/O.  It relies solely on its accompanying application for access to the network, filesystem, etc.  Therefore by analyzing an application, you can deduce what an enclave can do to the system, thus mitigating the fear of protected malicious code running inside an enclave.  Additionally, the lack of trusted I/O is a problem for securing user information.  Solutions like Protected Audio Video Path (PAVP) and SGXIO address this lack of I/O capabilities.
+Another potential issue is that it is possible for malware to execute its malicious code inside an enclave protected from every other program and user.  However, it is important to remember that code within an enclave has no I/O.  It relies solely on its accompanying application for access to the network, filesystem, etc.  Therefore by analyzing an application, you can deduce what an enclave can do to the system, thus mitigating the fear of protected malicious code running inside an enclave.  Additionally, the lack of trusted I/O is a problem for securing user information.  Solutions like Protected Audio Video Path (PAVP) and SGXIO address this lack of I/O capabilities.
 
-Additionally certain varients of Spectre (called SgxPectre) are able to read enclave memory and register values.  This enabled the recovery of the "Seal Key" of the platform, and consequently of the "Attestation Key", effectively bypassing the whole security scheme offered by SGX.  Intel has released a microcode update to prevent these attacks, and by using the "Security Version Number" (SVN), you are able to ensure that the microcode patches have been applied in order to pass the remote attestation process.  A new attack called SpectreRSB has recently been released, and it is able to bypass the patches by targeting the "Return Stack Buffer" (RSB) instead of the BTB.  This will require another microcode update to resolve this issue.
+Additionally certain variants of Spectre (called SgxPectre) are able to read enclave memory and register values.  This enables the recovery of the "Seal Key" of the platform, and consequently of the "Attestation Key", effectively bypassing the whole security scheme offered by SGX.  Intel has released a microcode update to prevent these attacks, and by using the "Security Version Number" (SVN), you are able to ensure that the microcode patches have been applied in order to pass the remote attestation process.  A new attack called SpectreRSB has recently been released, and it is able to bypass the patches by targeting the "Return Stack Buffer" (RSB) instead of the BTB.  This will require another microcode update to resolve this issue.
 
 ### Conclusion
 
