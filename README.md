@@ -467,8 +467,108 @@ This key is derived from the RSK and is used for the local attestation process.
 
 ![SGX_Key_Overview](/images/SGX_Key_Overview.png?raw=true "SGX Key Overview")
 
+### Side-Channel Attacks
 
+Intel SGX has been notorious over the years for its lack of resilience to various side-channel attacks.  Intel has always warned that enclaves must be written in a way to prevent side-channel attacks.  Below are some possible attacks on Intel SGX to give you an idea of what is required to execute such an attack and what information can be gained by the attacker.
 
+#### Cache Attacks on Intel SGX
+
+To perform a "cache timing attack" on an Intel SGX enclave, it is possible to pin two kernel threads to two logical cores sharing the same physical core and L1-cache.  The thread being attacked is running a version of an algorithm vulnerable to cache attacks inside the enclave.  Probing the cache line is done using the RDPMC instruction, which requires a counter to be started in supervisor mode which is possible within the SGX security model.
+
+![SGX_Cache_Attacks](/images/SGX_Cache_Attacks.png?raw=true "SGX Cache Attacks")
+
+Communication with the enclave is performed using shared memory instead of ECALL / OCALL as not to have to context switch from the running enclave.  This is where the attack distances itself from a real-world scenario.  An ECALL / OCALL would cause the entire cache to be evicted, thus preventing this attack from working.
+
+The attacker thread cannot be in a different process because process context switching requires to update the "Page Table" (PT), so the CR3 register containing the base address of the PR would have to be changed, which would trigger a TLB and L1-cache flush.
+
+The AES implementation of the SGX SDK is not vulnerable to such side-channel attacks.
+
+#### AsyncShock: Exploiting Synchronization Bugs in Intel SGX Enclaves
+
+The idea behind AsyncShock is to facilitate the exploitation of existing synchronization bugs inside an enclave.  In particular, it helps exploiting "Use After Free" (UAF) and "Time of Check, Time of Use" (TOCTOU) issues.  An attacker who is in control of the platform, which is within the threat model of Intel SGX, can interrupt enclave threads whenever they desire.
+
+Interrupting a thread is done using the "mprotect(2)" system call to remove the read and execute permissions on a page.  Because the traditional page walk is performed before checking if the access to an EPC page is allowed, the application can learn which memory pages the enclave is allowed to access even though it has no way to see what the pages contain.  When the thread exits the enclave, the execution resumes in the appropriate handler in the untrusted environment.
+
+![SGX_Asyncshock](/images/SGX_Asyncshock.png?raw=true "SGX ASyncShock")
+
+The application starts a first thread that is allowed to execute.  The read and execute permissions are removed from the code page containing the "free(3)" function.  When the thread calls "free(3)" (1), an access violation occurs resulting in an AEX and a segmentation fault caught by the application (2).  The permissions are restored for this page, but removed for the page containing the calling instruction before the thread is allowed to continue.  When the next marked page is hit (3), resulting in another AEX and segmentation fault (4), it signals that "free(3)" has returned.  In the signal handler, the permissions are restored again.  The first thread is stopped and a second thread is started and enters the enclave (5).  The sample code for this example is below.
+
+  ```
+  // Thread 1 enters the enclave
+  ...
+  free(pointer);
+
+  // Thread 1 is interrupted, exits the enclave
+  pointer = null;
+  ...
+
+  // Thread 2 enters the enclave
+  ...
+  if(pointer != null) {
+      //Thread 2 uses a pointer to freed memory
+  }
+  ...
+  ```
+
+Combined with a function pointer inside a structure and a memory allocator that reuses freed memory for the new allocations, these kind of bugs have the potential to allow for "Remote Code Execution" (RCE).  TOCTOU bugs might allow incorrect parameters to be used in the enclave, which might also have huge security implications.  Consider the simple example below:
+
+  ```
+  static int g_index = 0;
+  static int g_value = 0;
+  static int g_array[256];
+
+  void ocall_set_index(int index) {
+      g_index = g_index;
+  }
+
+  void ocall_set_value(int value) {
+      if(g_index < sizeof(g_array)) {
+          g_array[g_index] = value;
+      }
+  }
+  ```
+
+It may appear that "g_array" cannot be accessed with an invalid "g_index".  A first thread can execute lines 9 and 10 of the "ocall_set_value" function and then gets interrupted.  A second thread can then execute lines 5 to 7 of the funciton "ocall_set_index" to change the value of "g_index" after it has been checked by the first thread.  The first thread can then be resumed and the access performed at line 11 will be done with the value of "g_index" set by the second thread.  This results in an "Out of Bounds" (OOB) access.
+
+These attacks require complete control over the platform, knowing what code is running inside the enclave, and finding synchronization bugs in the code.  The best protection against this attack is to disable multithreading inside the enclave, but it will obviously hinder the performance of the program.  Another solution might be to encrypt the code of the enclave and use the remote attestation process to provide the enclave with the key needed to decrypt its code.
+
+#### Inferring Fine-Grained Control Flow Inside SGX Enclaves with Branch Shadowing
+
+Inside the processor, the "Branch Prediction Unit" (BPU) uses the "Branch Target Buffer" (BTB) to log information useful for branching predictions.  While this information is only used internally by the processor, Intel SGX leaves its branch history uncleared during enclave mode switches.  This allows the branches taken (or not) within an enclave to influence the prediction of the branches outside the enclave.  A technique called "branch shadowing" was developed to infer the control flow of a running enclave.
+
+The idea is to replicate the control flow of an enclave program inside the untrusted environment, carefully choosing the address at which this new code is mapped in order to introduce collisions inside the BTB.  By executing the branch within the enclave code first, then within the shadowed code, the prediction of the second branch is affected by the result of the first.  To know what was predicted by the processor, the "Last Branch Record" (LBR) can be used only in the untrusted environment, as it is disabled for enclaves.
+
+In order for this attack to work, the enclave execution must be interrupted as frequently as possible to perform the necessary measurements to infer the control flow of the enclave.  The APIC timer can be used to interrupt the execution every ~50 cycles and, if more precision is needed, disabling the processor cache allows to interrupt up to every ~5 cycles.
+
+Below is an explanation of the detection of conditional branches occurring within an enclave (green represents the case where the branch is taken, red where it is not).
+
+![SGX_Branch_Shadowing](/images/SGX_Branch_Shadowing.png?raw=true "SGX Branch Shadowing")
+
+1 - The conditional branch instruction of the enclave is executed.  If taken, the corresponding information is stored within the BTB.  Because this is occurring within the enclave, the LBR does not report this information.
+
+2 - Enclave execution is interrupted by the APIC timer and the OS takes control.
+
+3 - The OS enables the LBR and executes the shadowed code.
+
+4 - If the branch in the enclave was taken, the BPU correctly predicts that the branch will be taken, even though the target address is invalid because it is within the enclave.  If it was not taken, the BPU incorrectly predicts that the branch will not be taken.
+
+5 - By disabling and retrieving the LBR content, the OS can learn whether the enclave branch was taken or not by checking if the shadowed conditional branch was correctly predicted.
+
+Similar techniques are able to detect unconditional and indirect branches (the target address cannot be recovered by the attack).  This attack requires complete control over the platform and knowledge of the code bein gexecuted inside the enclave.  It also introduces a significant slowdown that an enclave might be able to detect (but it is not as simple as executing RTDSC, because it is not allowed inside enclaves).
+
+### Concerns
+
+Intel says that it does not retain the RPK embedded in each processor die at their manufacturing facilities, but if it turns out that they do, it would invalidate any security offered by the platform.  Futhermore, enclaves signed by Intel are granted special privileges, like the "Launch Enclave" (LE), which is used to whitelist which enclaves are allowed to execute.  Developers need to register into Intel programs to be able to sign release versions of their enclaves.  There exists an open-source initiative to develop an alternative LE that should be allowed to replace the current one starting with SGXv2.
+
+Another potential issue is that it is possible for malware to execute its malicious code inside an enclave protected from every other program and user.  However, it is important to remebmer that code within an enclave has no I/O.  It relies solely on its accompanying application for access to the network, filesystem, etc.  Therefore by analyzing an application, you can deduce what an enclave can do to the system, thus mitigating the fear of protected malicious code running inside an enclave.  Additionally, the lack of trusted I/O is a problem for securing user information.  Solutions like Protected Audio Video Path (PAVP) and SGXIO address this lack of I/O capabilities.
+
+Additionally certain varients of Spectre (called SgxPectre) are able to read enclave memory and register values.  This enabled the recovery of the "Seal Key" of the platform, and consequently of the "Attestation Key", effectively bypassing the whole security scheme offered by SGX.  Intel has released a microcode update to prevent these attacks, and by using the "Security Version Number" (SVN), you are able to ensure that the microcode patches have been applied in order to pass the remote attestation process.  A new attack called SpectreRSB has recently been released, and it is able to bypass the patches by targeting the "Return Stack Buffer" (RSB) instead of the BTB.  This will require another microcode update to resolve this issue.
+
+### Conclusion
+
+Intel SGX allows an enclave to be protected from other applications running on the system, and in some ways, prevents physical tampering.  It allows platform owners some control over the execution to allow for resource management, and the attestation process allows secrets to be securely transmitted to the enclave.
+
+There are some issues with SGX, such as being vulnerable to side-channel attacks, thus limiting the security offered by the technology.  The mass majority of these attacks can be prevented by encrypting the enclave's code and proving the key via remote attestation.
 
 ***
 
